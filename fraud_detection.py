@@ -273,3 +273,19 @@ plt.ylabel("True Positive Rate")
 plt.title("ROC Curves for Fraud Detection Models")
 plt.legend(loc="lower right")
 plt.show()
+
+import pickle
+
+# Save Logistic Regression model
+with open("logistic_regression.pkl", "wb") as f:
+    pickle.dump(log_reg, f)
+
+# Save Random Forest model
+with open("random_forest.pkl", "wb") as f:
+    pickle.dump(rf, f)
+
+# Save Scaler
+with open("scaler.pkl", "wb") as f:
+    pickle.dump(scaler, f)
+
+print("✅ Models and scaler saved as 'logistic_regression.pkl', 'random_forest.pkl', and 'scaler.pkl'")

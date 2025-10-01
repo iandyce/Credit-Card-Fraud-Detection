@@ -1,90 +1,114 @@
 import streamlit as st
 import pandas as pd
-import pickle
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
+import seaborn as sns
+import pickle
 
-# Load models
+# -------------------------------
+# Load Models and Scaler
+# -------------------------------
 with open("logistic_regression.pkl", "rb") as f:
-    lr_model = pickle.load(f)
+    log_reg = pickle.load(f)
 
 with open("random_forest.pkl", "rb") as f:
-    rf_model = pickle.load(f)
+    rf = pickle.load(f)
 
-# Scaler (fit once with training data, here simplified by re-fitting on uploaded data)
-scaler = StandardScaler()
+with open("scaler.pkl", "rb") as f:
+    scaler = pickle.load(f)
 
-# Streamlit UI
+# -------------------------------
+# Streamlit App
+# -------------------------------
 st.set_page_config(page_title="Credit Card Fraud Detection Dashboard", layout="wide")
 st.title("💳 Credit Card Fraud Detection Dashboard")
-st.write("Upload transaction data and predict fraud using **Logistic Regression** and **Random Forest** models.")
 
-# File uploader
-uploaded_file = st.file_uploader("Upload a CSV file with transactions", type=["csv"])
+# Sidebar
+st.sidebar.header("🔍 Options")
+option = st.sidebar.radio("Choose Action", ["Upload Dataset", "Check Single Transaction", "About"])
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+# -------------------------------
+# Upload Dataset
+# -------------------------------
+if option == "Upload Dataset":
+    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+    if uploaded_file:
+        data = pd.read_csv(uploaded_file)
+        st.subheader("📊 Data Preview")
+        st.write(data.head())
 
-    st.subheader("Uploaded Data Preview")
-    st.dataframe(df.head())
+        if "Class" in data.columns:
+            st.subheader("⚖️ Fraud vs Non-Fraud Cases")
+            fig, ax = plt.subplots()
+            sns.countplot(x="Class", data=data, ax=ax, palette="Set2")
+            st.pyplot(fig)
 
-    # Preprocess (scale features, drop target column if exists)
-    if "Class" in df.columns:
-        df = df.drop(columns=["Class"])  # drop label if included
+        # Predict using Random Forest
+        if "Class" in data.columns:
+            X = data.drop(columns=["Class"])
+        else:
+            X = data.copy()
 
-    df_scaled = scaler.fit_transform(df)
+        X_scaled = scaler.transform(X)
+        predictions = rf.predict(X_scaled)
+        probabilities = rf.predict_proba(X_scaled)[:, 1]
 
-    # Predictions
-    st.subheader("Prediction Results")
-    predictions = rf_model.predict(df_scaled)
-    fraud_count = (predictions == 1).sum()
-    nonfraud_count = (predictions == 0).sum()
+        data["Fraud Prediction"] = predictions
+        data["Fraud Probability"] = probabilities
 
-    st.success(f"✅ Legit Transactions: {nonfraud_count}")
-    st.error(f"🚨 Fraudulent Transactions: {fraud_count}")
+        st.subheader("🔎 Prediction Results")
+        st.write(data.head())
 
-    # Fraud vs Non-Fraud Bar Chart
-    st.subheader("Fraud vs Non-Fraud Predictions")
-    fig, ax = plt.subplots()
-    ax.bar(["Non-Fraud", "Fraud"], [nonfraud_count, fraud_count], color=["green", "red"])
-    ax.set_ylabel("Number of Transactions")
-    st.pyplot(fig)
+        st.subheader("📈 Fraud Probability Distribution")
+        fig, ax = plt.subplots()
+        sns.histplot(probabilities, bins=20, kde=True, ax=ax, color="red")
+        ax.set_xlabel("Fraud Probability")
+        st.pyplot(fig)
 
-    # Fraud Probability Distribution
-    st.subheader("Fraud Probability Distribution")
-    fraud_probs = rf_model.predict_proba(df_scaled)[:, 1]
-    fig, ax = plt.subplots()
-    ax.hist(fraud_probs, bins=50, color="orange", alpha=0.7)
-    ax.set_xlabel("Predicted Fraud Probability")
-    ax.set_ylabel("Number of Transactions")
-    st.pyplot(fig)
+        st.subheader("🌳 Random Forest Feature Importance")
+        feature_importance = pd.DataFrame({
+            "Feature": X.columns,
+            "Importance": rf.feature_importances_
+        }).sort_values(by="Importance", ascending=False).head(10)
 
-    # Feature Importance
-    st.subheader("Feature Importance (Random Forest)")
-    importance_df = pd.DataFrame({
-        "Feature": df.columns,
-        "Importance": rf_model.feature_importances_
-    }).sort_values(by="Importance", ascending=False)
-    st.bar_chart(importance_df.set_index("Feature").head(10))
+        fig, ax = plt.subplots()
+        sns.barplot(x="Importance", y="Feature", data=feature_importance, ax=ax, palette="viridis")
+        st.pyplot(fig)
 
-# Sidebar - Single Transaction Check
-st.sidebar.header("🔎 Check a Single Transaction")
+# -------------------------------
+# Single Transaction Checker
+# -------------------------------
+elif option == "Check Single Transaction":
+    st.subheader("📝 Enter Transaction Details")
 
-# Build input fields (for demo we only use Amount + Time, rest set to 0)
-time = st.sidebar.number_input("Time (seconds)", min_value=0.0, value=5000.0)
-amount = st.sidebar.number_input("Transaction Amount", min_value=0.0, value=100.0)
+    # Example input fields (you can expand with more features if needed)
+    time = st.number_input("Time", min_value=0, value=0)
+    amount = st.number_input("Amount", min_value=0.0, value=100.0)
 
-# Placeholder for 28 PCA features
-extra_features = [0] * 28
-single_input = pd.DataFrame([[time, amount] + extra_features], 
-                            columns=(["Time", "Amount"] + [f"V{i}" for i in range(1, 29)]))
+    # For simplicity: V1–V28 features can be set to 0
+    other_features = [0] * 28
+    input_data = pd.DataFrame([[time] + other_features + [amount]],
+                              columns=["Time"] + [f"V{i}" for i in range(1, 29)] + ["Amount"])
 
-# Scale and predict
-single_scaled = scaler.fit_transform(single_input)  # ⚠️ Here we re-fit; ideally use training scaler
-single_pred = rf_model.predict(single_scaled)[0]
+    # Scale and predict
+    input_scaled = scaler.transform(input_data)
+    prediction = rf.predict(input_scaled)[0]
+    probability = rf.predict_proba(input_scaled)[0][1]
 
-st.sidebar.subheader("Prediction Result")
-if single_pred == 1:
-    st.sidebar.error("🚨 Fraudulent Transaction Detected!")
+    st.write("### Prediction Result")
+    if prediction == 1:
+        st.error(f"🚨 Fraudulent Transaction Detected! (Probability: {probability:.2f})")
+    else:
+        st.success(f"✅ Legitimate Transaction (Probability of Fraud: {probability:.2f})")
+
+# -------------------------------
+# About Page
+# -------------------------------
 else:
-    st.sidebar.success("✅ Legitimate Transaction")
+    st.subheader("ℹ️ About This Project")
+    st.write("""
+        This dashboard allows interactive analysis of credit card transactions 
+        to detect fraudulent activities. It supports:
+        - Uploading datasets for fraud prediction.
+        - Visualizing fraud distributions and feature importance.
+        - Checking single transaction risk in real-time.
+    """)
