@@ -252,3 +252,24 @@ plt.show()
 joblib.dump(log_reg, "logistic_regression_model.pkl")
 joblib.dump(rf, "random_forest_model.pkl")
 print("\nModels saved as 'logistic_regression_model.pkl' and 'random_forest_model.pkl'")
+
+models = {
+    "Logistic Regression": log_reg,
+    "Random Forest": rf
+}
+
+plt.figure(figsize=(8, 6))
+
+for name, model in models.items():
+    y_pred_prob = model.predict_proba(X_test)[:, 1]
+    fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+    roc_auc = auc(fpr, tpr)
+    
+    plt.plot(fpr, tpr, label=f"{name} (AUC = {roc_auc:.2f})")
+
+plt.plot([0, 1], [0, 1], 'k--', label="Random Guess")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curves for Fraud Detection Models")
+plt.legend(loc="lower right")
+plt.show()
